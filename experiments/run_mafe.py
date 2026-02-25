@@ -10,6 +10,8 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.linear_model import LogisticRegression
 
 from agents.transformer import TransformationAgent
+from agents.interaction import InteractionAgent
+from agents.coordinator import CoordinatorAgent
 
 # -----------------------------
 # Paths
@@ -17,6 +19,7 @@ from agents.transformer import TransformationAgent
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data" / "raw"
 RESULTS_DIR = BASE_DIR / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # -----------------------------
 # Load Adult Dataset
@@ -55,16 +58,21 @@ def evaluate(model, X_test, y_test):
     )
 
 # -----------------------------
-# MAFE Round-1
+# Main (MAFE Day 3)
 # -----------------------------
 if __name__ == "__main__":
+
+    # Load data
     X, y = load_adult()
 
-    # Baseline split
+    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
+    # -----------------------------
+    # Baseline model
+    # -----------------------------
     numeric = X.select_dtypes(include=np.number).columns
     categorical = X.select_dtypes(exclude=np.number).columns
 
@@ -73,27 +81,51 @@ if __name__ == "__main__":
         ("cat", OneHotEncoder(handle_unknown="ignore"), categorical)
     ])
 
-    model = Pipeline([
+    baseline_model = Pipeline([
         ("prep", preprocessor),
         ("clf", LogisticRegression(max_iter=1000))
     ])
 
-    # Baseline
-    model.fit(X_train, y_train)
-    base_acc, base_f1, base_auc = evaluate(model, X_test, y_test)
+    baseline_model.fit(X_train, y_train)
+    base_acc, base_f1, base_auc = evaluate(baseline_model, X_test, y_test)
 
-    # --- Agent step ---
-    agent = TransformationAgent()
-    new_feats = agent.propose_features(X_train)
+    # -----------------------------
+    # Agents
+    # -----------------------------
+    t_agent = TransformationAgent()
+    i_agent = InteractionAgent()
+    coordinator = CoordinatorAgent(max_total_features=60)
 
-    X_train_aug = pd.concat([X_train.reset_index(drop=True),
-                             new_feats.reset_index(drop=True)], axis=1)
-    X_test_aug = pd.concat([
-        X_test.reset_index(drop=True),
-        agent.propose_features(X_test).reset_index(drop=True)
-    ], axis=1)
+    # Propose features
+    t_feats_train = t_agent.propose_features(X_train)
+    i_feats_train = i_agent.propose_features(X_train)
 
-    # Rebuild pipeline
+    selected = coordinator.select({
+        "TransformationAgent": t_feats_train,
+        "InteractionAgent": i_feats_train
+    })
+
+    # Apply selected features
+    X_train_aug = X_train.reset_index(drop=True)
+    X_test_aug = X_test.reset_index(drop=True)
+
+    for agent_name, feats in selected.items():
+        X_train_aug = pd.concat(
+            [X_train_aug, feats.reset_index(drop=True)], axis=1
+        )
+
+        if agent_name == "TransformationAgent":
+            test_feats = t_agent.propose_features(X_test)
+        else:
+            test_feats = i_agent.propose_features(X_test)
+
+        X_test_aug = pd.concat(
+            [X_test_aug, test_feats.reset_index(drop=True)], axis=1
+        )
+
+    # -----------------------------
+    # Retrain with augmented features
+    # -----------------------------
     numeric_aug = X_train_aug.select_dtypes(include=np.number).columns
     categorical_aug = X_train_aug.select_dtypes(exclude=np.number).columns
 
@@ -110,19 +142,26 @@ if __name__ == "__main__":
     model_aug.fit(X_train_aug, y_train)
     acc, f1, auc = evaluate(model_aug, X_test_aug, y_test)
 
-    print("\n=== MAFE Round-1 (Transformation Agent) ===")
-    print(f"Baseline  -> acc={base_acc:.4f}, f1={base_f1:.4f}, auc={base_auc:.4f}")
-    print(f"With Agent-> acc={acc:.4f}, f1={f1:.4f}, auc={auc:.4f}")
+    # -----------------------------
+    # Results
+    # -----------------------------
+    print("\n=== MAFE Round-2 (Multi-Agent) ===")
+    print(f"Baseline   -> acc={base_acc:.4f}, f1={base_f1:.4f}, auc={base_auc:.4f}")
+    print(f"With Agents-> acc={acc:.4f}, f1={f1:.4f}, auc={auc:.4f}")
 
-    # Save result
     out = pd.DataFrame([{
         "dataset": "Adult",
-        "round": 1,
-        "agent": "TransformationAgent",
-        "features_added": new_feats.shape[1],
+        "round": 2,
+        "agent": "Transformation+Interaction",
+        "features_added": sum(df.shape[1] for df in selected.values()),
         "accuracy": acc,
         "f1": f1,
         "auc": auc
     }])
 
-    out.to_csv(RESULTS_DIR / "mafe_runs.csv", index=False)
+    output_path = RESULTS_DIR / "mafe_runs.csv"
+
+if output_path.exists():
+    out.to_csv(output_path, mode="a", header=False, index=False)
+else:
+    out.to_csv(output_path, index=False)
