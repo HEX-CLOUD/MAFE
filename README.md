@@ -89,10 +89,9 @@ A Streamlit dashboard is provided for result exploration:
 streamlit run ui/dashboard.py
 ```
 
-```
 # PROJECT STRUCTURE :-
-```
 
+```
 MAFE/
 ├── agents/
 ├── data/
@@ -102,10 +101,9 @@ MAFE/
 ├── ui/
 ├── docs/
 └── README.md
+```
 
-```
 # Reproducibility
-```
 
 All experiments can be reproduced using:
 
