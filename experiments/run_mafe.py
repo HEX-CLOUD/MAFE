@@ -28,7 +28,8 @@ def load_adult():
     cols = [
         "age","workclass","fnlwgt","education","education_num",
         "marital_status","occupation","relationship","race","sex",
-        "capital_gain","capital_loss","hours_per_week","native_country","income"
+        "capital_gain","capital_loss","hours_per_week",
+        "native_country","income"
     ]
 
     df = pd.read_csv(
@@ -58,7 +59,7 @@ def evaluate(model, X_test, y_test):
     )
 
 # -----------------------------
-# Main (MAFE Day 3)
+# Main (MAFE Round-2: Multi-Agent)
 # -----------------------------
 if __name__ == "__main__":
 
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     )
 
     # -----------------------------
-    # Baseline model
+    # Baseline Model
     # -----------------------------
     numeric = X.select_dtypes(include=np.number).columns
     categorical = X.select_dtypes(exclude=np.number).columns
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     i_agent = InteractionAgent()
     coordinator = CoordinatorAgent(max_total_features=60)
 
-    # Propose features
+    # Feature proposals
     t_feats_train = t_agent.propose_features(X_train)
     i_feats_train = i_agent.propose_features(X_train)
 
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         )
 
     # -----------------------------
-    # Retrain with augmented features
+    # Retrain with Augmented Features
     # -----------------------------
     numeric_aug = X_train_aug.select_dtypes(include=np.number).columns
     categorical_aug = X_train_aug.select_dtypes(exclude=np.number).columns
@@ -161,7 +162,7 @@ if __name__ == "__main__":
 
     output_path = RESULTS_DIR / "mafe_runs.csv"
 
-if output_path.exists():
-    out.to_csv(output_path, mode="a", header=False, index=False)
-else:
-    out.to_csv(output_path, index=False)
+    if output_path.exists():
+        out.to_csv(output_path, mode="a", header=False, index=False)
+    else:
+        out.to_csv(output_path, index=False)
