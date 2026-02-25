@@ -89,7 +89,9 @@ A Streamlit dashboard is provided for result exploration:
 streamlit run ui/dashboard.py
 ```
 
+```
 # PROJECT STRUCTURE :-
+```
 
 MAFE/
 ├── agents/
@@ -101,9 +103,13 @@ MAFE/
 ├── docs/
 └── README.md
 
+```
 # Reproducibility
+```
 
 All experiments can be reproduced using:
 
+```
 -python -m experiments.run_mafe
 -python experiments.ablations
+```
