@@ -32,7 +32,7 @@ def evaluate_model(model, X_test, y_test):
     }
 
 # -----------------------------
-# Dataset 1: Adult Income
+# Dataset : Adult Income
 # -----------------------------
 def load_adult():
     cols = [
@@ -57,23 +57,6 @@ def load_adult():
     return X, y
 
 # -----------------------------
-# Dataset 2: Churn
-# -----------------------------
-def load_churn():
-    df = pd.read_csv(DATA_DIR / "churn" / "churn.csv")
-
-    # adapt column names if needed
-    target_col = "Churn"
-    df[target_col] = df[target_col].map({"Yes": 1, "No": 0})
-
-    df.dropna(inplace=True)
-
-    X = df.drop(target_col, axis=1)
-    y = df[target_col]
-
-    return X, y
-
-# -----------------------------
 # Baseline Runner
 # -----------------------------
 def run_baselines(X, y, dataset_name):
@@ -87,7 +70,11 @@ def run_baselines(X, y, dataset_name):
 
     models = {
         "LogisticRegression": LogisticRegression(max_iter=1000),
-        "RandomForest": RandomForestClassifier(n_estimators=200, random_state=42)
+        "RandomForest": RandomForestClassifier(
+          n_estimators=50,
+          random_state=42,
+          n_jobs=-1
+)
     }
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -124,8 +111,6 @@ if __name__ == "__main__":
     X_adult, y_adult = load_adult()
     all_results.extend(run_baselines(X_adult, y_adult, "Adult"))
 
-    X_churn, y_churn = load_churn()
-    all_results.extend(run_baselines(X_churn, y_churn, "Churn"))
 
     df_results = pd.DataFrame(all_results)
     df_results.to_csv(RESULTS_DIR / "baselines.csv", index=False)

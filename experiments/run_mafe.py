@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import joblib
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -19,7 +20,10 @@ from agents.coordinator import CoordinatorAgent
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data" / "raw"
 RESULTS_DIR = BASE_DIR / "results"
+MODELS_DIR = BASE_DIR / "models"
+
 RESULTS_DIR.mkdir(exist_ok=True)
+MODELS_DIR.mkdir(exist_ok=True)
 
 # -----------------------------
 # Load Adult Dataset
@@ -90,6 +94,9 @@ if __name__ == "__main__":
     baseline_model.fit(X_train, y_train)
     base_acc, base_f1, base_auc = evaluate(baseline_model, X_test, y_test)
 
+    # ✅ SAVE BASELINE MODEL
+    joblib.dump(baseline_model, MODELS_DIR / "baseline_adult.pkl")
+
     # -----------------------------
     # Agents
     # -----------------------------
@@ -142,6 +149,9 @@ if __name__ == "__main__":
 
     model_aug.fit(X_train_aug, y_train)
     acc, f1, auc = evaluate(model_aug, X_test_aug, y_test)
+
+    # ✅ SAVE FINAL MAFE MODEL
+    joblib.dump(model_aug, MODELS_DIR / "mafe_adult.pkl")
 
     # -----------------------------
     # Results
