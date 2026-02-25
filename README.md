@@ -91,7 +91,6 @@ streamlit run ui/dashboard.py
 
 # PROJECT STRUCTURE :-
 
-```
 MAFE/
 ├── agents/
 ├── data/
@@ -101,7 +100,6 @@ MAFE/
 ├── ui/
 ├── docs/
 └── README.md
-```
 
 # Reproducibility
 
