@@ -13,6 +13,8 @@ from sklearn.linear_model import LogisticRegression
 from agents.transformer import TransformationAgent
 from agents.interaction import InteractionAgent
 from agents.coordinator import CoordinatorAgent
+from agents.pruner import PrunerAgent
+from agents.leakage import LeakageDetectionAgent
 
 # -----------------------------
 # Paths
@@ -63,20 +65,18 @@ def evaluate(model, X_test, y_test):
     )
 
 # -----------------------------
-# Main (MAFE Round-2: Multi-Agent)
+# Main (MAFE Round-4: Leakage Safe)
 # -----------------------------
 if __name__ == "__main__":
 
-    # Load data
     X, y = load_adult()
 
-    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
     # -----------------------------
-    # Baseline Model
+    # Baseline
     # -----------------------------
     numeric = X.select_dtypes(include=np.number).columns
     categorical = X.select_dtypes(exclude=np.number).columns
@@ -94,77 +94,86 @@ if __name__ == "__main__":
     baseline_model.fit(X_train, y_train)
     base_acc, base_f1, base_auc = evaluate(baseline_model, X_test, y_test)
 
-    # ✅ SAVE BASELINE MODEL
-    joblib.dump(baseline_model, MODELS_DIR / "baseline_adult.pkl")
-
     # -----------------------------
     # Agents
     # -----------------------------
     t_agent = TransformationAgent()
     i_agent = InteractionAgent()
     coordinator = CoordinatorAgent(max_total_features=60)
+    pruner = PrunerAgent()
+    leakage_agent = LeakageDetectionAgent()
 
-    # Feature proposals
-    t_feats_train = t_agent.propose_features(X_train)
-    i_feats_train = i_agent.propose_features(X_train)
+    # Feature generation
+    t_feats = t_agent.propose_features(X_train)
+    i_feats = i_agent.propose_features(X_train)
 
     selected = coordinator.select({
-        "TransformationAgent": t_feats_train,
-        "InteractionAgent": i_feats_train
+        "TransformationAgent": t_feats,
+        "InteractionAgent": i_feats
     })
 
-    # Apply selected features
     X_train_aug = X_train.reset_index(drop=True)
     X_test_aug = X_test.reset_index(drop=True)
 
-    for agent_name, feats in selected.items():
-        X_train_aug = pd.concat(
-            [X_train_aug, feats.reset_index(drop=True)], axis=1
-        )
+    for agent, feats in selected.items():
+        X_train_aug = pd.concat([X_train_aug, feats.reset_index(drop=True)], axis=1)
 
-        if agent_name == "TransformationAgent":
+        if agent == "TransformationAgent":
             test_feats = t_agent.propose_features(X_test)
         else:
             test_feats = i_agent.propose_features(X_test)
 
-        X_test_aug = pd.concat(
-            [X_test_aug, test_feats.reset_index(drop=True)], axis=1
-        )
+        X_test_aug = pd.concat([X_test_aug, test_feats.reset_index(drop=True)], axis=1)
 
     # -----------------------------
-    # Retrain with Augmented Features
+    # Pruning
     # -----------------------------
-    numeric_aug = X_train_aug.select_dtypes(include=np.number).columns
-    categorical_aug = X_train_aug.select_dtypes(exclude=np.number).columns
+    X_train_pruned = pruner.prune(X_train_aug)
+    X_test_pruned = X_test_aug[X_train_pruned.columns]
 
-    preprocessor_aug = ColumnTransformer([
-        ("num", StandardScaler(), numeric_aug),
-        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_aug)
+    # -----------------------------
+    # Leakage Detection
+    # -----------------------------
+    X_train_safe = leakage_agent.detect_and_remove(X_train_pruned, y_train)
+    X_test_safe = X_test_pruned[X_train_safe.columns]
+
+    print(
+        f"LeakageAgent removed {len(leakage_agent.flagged_features)} features"
+    )
+
+    # -----------------------------
+    # Train final model
+    # -----------------------------
+    numeric_final = X_train_safe.select_dtypes(include=np.number).columns
+    categorical_final = X_train_safe.select_dtypes(exclude=np.number).columns
+
+    preprocessor_final = ColumnTransformer([
+        ("num", StandardScaler(), numeric_final),
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_final)
     ])
 
-    model_aug = Pipeline([
-        ("prep", preprocessor_aug),
+    final_model = Pipeline([
+        ("prep", preprocessor_final),
         ("clf", LogisticRegression(max_iter=1000))
     ])
 
-    model_aug.fit(X_train_aug, y_train)
-    acc, f1, auc = evaluate(model_aug, X_test_aug, y_test)
+    final_model.fit(X_train_safe, y_train)
+    acc, f1, auc = evaluate(final_model, X_test_safe, y_test)
 
-    # ✅ SAVE FINAL MAFE MODEL
-    joblib.dump(model_aug, MODELS_DIR / "mafe_adult.pkl")
+    joblib.dump(final_model, MODELS_DIR / "mafe_adult_leakage_safe.pkl")
 
     # -----------------------------
     # Results
     # -----------------------------
-    print("\n=== MAFE Round-2 (Multi-Agent) ===")
+    print("\n=== MAFE Round-4 (Leakage-Safe MAS) ===")
     print(f"Baseline   -> acc={base_acc:.4f}, f1={base_f1:.4f}, auc={base_auc:.4f}")
     print(f"With Agents-> acc={acc:.4f}, f1={f1:.4f}, auc={auc:.4f}")
 
     out = pd.DataFrame([{
         "dataset": "Adult",
-        "round": 2,
-        "agent": "Transformation+Interaction",
-        "features_added": sum(df.shape[1] for df in selected.values()),
+        "round": 4,
+        "agent": "Transformation+Interaction+Pruner+Leakage",
+        "features_added": X_train_safe.shape[1] - X_train.shape[1],
         "accuracy": acc,
         "f1": f1,
         "auc": auc

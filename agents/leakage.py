@@ -1,29 +1,25 @@
 import pandas as pd
 import numpy as np
 
-class PrunerAgent:
+class LeakageDetectionAgent:
     """
-    Agent responsible for pruning low-quality features.
+    Detects and removes potential target leakage features.
     """
 
-    def __init__(self, var_threshold=1e-4, corr_threshold=0.95):
-        self.var_threshold = var_threshold
+    def __init__(self, corr_threshold=0.98):
         self.corr_threshold = corr_threshold
+        self.flagged_features = []
 
-    def prune(self, X: pd.DataFrame) -> pd.DataFrame:
-        X_pruned = X.copy()
+    def detect_and_remove(self, X: pd.DataFrame, y: pd.Series):
+        X_safe = X.copy()
+        self.flagged_features = []
 
-        # 1. Remove low-variance features
-        variances = X_pruned.var(numeric_only=True)
-        low_var_cols = variances[variances < self.var_threshold].index.tolist()
-        X_pruned.drop(columns=low_var_cols, inplace=True, errors="ignore")
+        for col in X_safe.select_dtypes(include=np.number).columns:
+            corr = np.corrcoef(X_safe[col], y)[0, 1]
+            if abs(corr) > self.corr_threshold:
+                self.flagged_features.append(col)
 
-        # 2. Remove highly correlated features
-        corr = X_pruned.corr(numeric_only=True).abs()
-        upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
-        high_corr_cols = [
-            column for column in upper.columns if any(upper[column] > self.corr_threshold)
-        ]
-        X_pruned.drop(columns=high_corr_cols, inplace=True, errors="ignore")
+        if self.flagged_features:
+            X_safe.drop(columns=self.flagged_features, inplace=True)
 
-        return X_pruned
+        return X_safe
